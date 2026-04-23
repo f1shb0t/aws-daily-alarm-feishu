@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+*.d.ts
+!lib/**/*.d.ts
+
+# CDK
+cdk.out/
+cdk.context.json
+*.js
+!jest.config.js
+
+# Env
+.env
+.env.local
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets (important!)
+**/feishu-webhook*.txt
+**/secrets.json
