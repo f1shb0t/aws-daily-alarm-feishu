@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+
+// 加载 .env（如果存在）—— 必须在读取 process.env 之前
+// 优先级：shell 环境变量 > .env 文件（dotenv 默认不覆盖已存在的 env）
+dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+
 import * as cdk from 'aws-cdk-lib';
 import { DailyAlarmFeishuStack } from '../lib/daily-alarm-feishu-stack';
 

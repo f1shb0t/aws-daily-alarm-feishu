@@ -65,16 +65,22 @@ git clone git@github.com:f1shb0t/aws-daily-alarm-feishu.git
 cd aws-daily-alarm-feishu
 npm install
 
-# 2. 配置（二选一）
+# 2. 配置（三选一，可混用）
 
-## 方式 A：环境变量
+## 方式 A：.env 文件（推荐，最省事）
+cp .env.example .env
+# 编辑 .env 填入真实值，cdk deploy 启动时会自动加载。
+# 注意：shell 中已存在的环境变量优先级高于 .env（不会被覆盖）
+
+## 方式 B：shell 环境变量
 export FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
 export FEISHU_WEBHOOK_SECRET=""   # 可选，未开启签名留空
 export TARGET_REGIONS="us-east-1,us-west-2,ap-northeast-1"
 export SCHEDULE_EXPRESSION="cron(0 1 * * ? *)"   # UTC 01:00 = 北京 09:00
 export CDK_DEFAULT_REGION="us-east-1"            # Stack 部署到哪个 Region
 
-## 方式 B：cdk.context.json 或 -c 参数
+## 方式 C：CDK context (-c 参数)
+# 注意：CDK_DEFAULT_REGION 没有 -c 等价形式，只能用环境变量 / .env
 npx cdk deploy \
   -c feishuWebhookUrl="https://open.feishu.cn/open-apis/bot/v2/hook/xxx" \
   -c regions="us-east-1,ap-northeast-1"
@@ -127,14 +133,27 @@ Regions: us-east-1, ap-northeast-1
 
 ## ⚙️ 配置项
 
-所有参数都可通过**环境变量**或 **CDK context**（`-c key=value`）传入：
+所有参数都可通过 **`.env` 文件** / **环境变量** / **CDK context**（`-c key=value`）传入。优先级：
 
-| 参数 | 环境变量 | CDK context | 默认值 | 说明 |
+```
+shell 环境变量  >  .env 文件  >  CDK context  >  代码默认值
+```
+
+（`.env` 的加载由 `bin/app.ts` 中的 `dotenv` 完成，不会覆盖已存在的 shell 变量）
+
+| 参数 | 环境变量 / .env key | CDK context | 默认值 | 说明 |
 |---|---|---|---|---|
 | 飞书 Webhook URL | `FEISHU_WEBHOOK_URL` | `feishuWebhookUrl` | **必填** | 自定义机器人 URL |
 | 飞书签名 secret | `FEISHU_WEBHOOK_SECRET` | `feishuWebhookSecret` | 空 | 若开启签名校验则填写 |
-| 监控 Region 列表 | `TARGET_REGIONS` | `regions` | `us-east-1,us-west-2,ap-northeast-1,ap-southeast-1` | 逗号分隔 |
+| 监控 Region 列表 | `TARGET_REGIONS` | `regions` | `us-east-1,us-west-2,ap-northeast-1,ap-southeast-1` | 逗号分隔，Lambda 要遍历的 Region |
 | cron 表达式（UTC） | `SCHEDULE_EXPRESSION` | `scheduleExpression` | `cron(0 1 * * ? *)` | EventBridge 格式 |
+| **Stack 部署 Region** | `CDK_DEFAULT_REGION` | —（无 `-c` 形式） | `us-east-1` | CDK 原生变量，决定 Stack 本身部署到哪个 Region；**只能通过环境变量或 .env 指定** |
+
+> ⚠️ **`CDK_DEFAULT_REGION` 和 `TARGET_REGIONS` 的区别**
+> - `CDK_DEFAULT_REGION`：Stack（Lambda 本体 + EventBridge Rule）部署到哪个 Region
+> - `TARGET_REGIONS`：Lambda 运行时要遍历检查 CloudWatch Alarm 的 Region 列表
+>
+> 两者互相独立。例如可以把 Stack 部署在 `us-east-1`，然后让它监控 `ap-northeast-1 + ap-southeast-1`。
 
 **常用 cron 示例**（EventBridge 使用 **UTC**）：
 
