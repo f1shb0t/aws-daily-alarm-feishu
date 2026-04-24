@@ -1,13 +1,15 @@
 # Dependencies
 node_modules/
+
+# TypeScript 编译产物（由 `tsc` 生成，不应提交）
 *.d.ts
-!lib/**/*.d.ts
+*.js
+*.js.map
+!jest.config.js
 
 # CDK
 cdk.out/
 cdk.context.json
-*.js
-!jest.config.js
 
 # Env
 .env
