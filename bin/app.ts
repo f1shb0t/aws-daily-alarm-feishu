@@ -29,12 +29,19 @@ const targetRegions: string[] = regionsCtx
   ? regionsCtx.split(',').map((r: string) => r.trim()).filter(Boolean)
   : ['us-east-1', 'us-west-2', 'ap-northeast-1', 'ap-southeast-1'];
 
-// cron 表达式（EventBridge Scheduler 使用 UTC）
-// 默认每天 UTC 01:00 = 北京 09:00
+// cron 表达式
+// EventBridge Scheduler 支持 cron / rate / at 三种表达式
+// 默认每天 09:00（按 SCHEDULE_TIMEZONE 指定的时区，默认 Asia/Shanghai）
 const scheduleExpression =
   app.node.tryGetContext('scheduleExpression') ||
   process.env.SCHEDULE_EXPRESSION ||
-  'cron(0 1 * * ? *)';
+  'cron(0 9 * * ? *)';
+
+// 调度时区（IANA 格式）—— Scheduler 原生支持，不用再手动把北京时间换算成 UTC
+const scheduleTimezone =
+  app.node.tryGetContext('scheduleTimezone') ||
+  process.env.SCHEDULE_TIMEZONE ||
+  'Asia/Shanghai';
 
 new DailyAlarmFeishuStack(app, 'DailyAlarmFeishuStack', {
   env: {
@@ -45,5 +52,6 @@ new DailyAlarmFeishuStack(app, 'DailyAlarmFeishuStack', {
   feishuWebhookSecret,
   targetRegions,
   scheduleExpression,
+  scheduleTimezone,
   description: 'Daily AWS alarm digest pushed to Feishu (Lark)',
 });

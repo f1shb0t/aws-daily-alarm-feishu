@@ -21,7 +21,7 @@
 ## 🏗️ 架构
 
 ```
- EventBridge Rule (cron, UTC)
+ EventBridge Scheduler (cron, 原生时区)
           ↓
   Lambda (Python 3.12)
           ├─ boto3.cloudwatch.describe_alarms  × N regions
@@ -76,7 +76,8 @@ cp .env.example .env
 export FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
 export FEISHU_WEBHOOK_SECRET=""   # 可选，未开启签名留空
 export TARGET_REGIONS="us-east-1,us-west-2,ap-northeast-1"
-export SCHEDULE_EXPRESSION="cron(0 1 * * ? *)"   # UTC 01:00 = 北京 09:00
+export SCHEDULE_EXPRESSION="cron(0 9 * * ? *)"   # 每天 09:00（按下面的时区）
+export SCHEDULE_TIMEZONE="Asia/Shanghai"         # IANA 时区，Scheduler 原生支持
 export CDK_DEFAULT_REGION="us-east-1"            # Stack 部署到哪个 Region
 
 ## 方式 C：CDK context (-c 参数)
@@ -146,23 +147,25 @@ shell 环境变量  >  .env 文件  >  CDK context  >  代码默认值
 | 飞书 Webhook URL | `FEISHU_WEBHOOK_URL` | `feishuWebhookUrl` | **必填** | 自定义机器人 URL |
 | 飞书签名 secret | `FEISHU_WEBHOOK_SECRET` | `feishuWebhookSecret` | 空 | 若开启签名校验则填写 |
 | 监控 Region 列表 | `TARGET_REGIONS` | `regions` | `us-east-1,us-west-2,ap-northeast-1,ap-southeast-1` | 逗号分隔，Lambda 要遍历的 Region |
-| cron 表达式（UTC） | `SCHEDULE_EXPRESSION` | `scheduleExpression` | `cron(0 1 * * ? *)` | EventBridge 格式 |
+| cron 表达式 | `SCHEDULE_EXPRESSION` | `scheduleExpression` | `cron(0 9 * * ? *)` | EventBridge Scheduler 格式，按下一行的时区解释 |
+| 调度时区 | `SCHEDULE_TIMEZONE` | `scheduleTimezone` | `Asia/Shanghai` | IANA 时区名（`UTC` / `America/Los_Angeles` / `Europe/Berlin` 等） |
 | **Stack 部署 Region** | `CDK_DEFAULT_REGION` | —（无 `-c` 形式） | `us-east-1` | CDK 原生变量，决定 Stack 本身部署到哪个 Region；**只能通过环境变量或 .env 指定** |
 
 > ⚠️ **`CDK_DEFAULT_REGION` 和 `TARGET_REGIONS` 的区别**
-> - `CDK_DEFAULT_REGION`：Stack（Lambda 本体 + EventBridge Rule）部署到哪个 Region
+> - `CDK_DEFAULT_REGION`：Stack（Lambda 本体 + Scheduler）部署到哪个 Region
 > - `TARGET_REGIONS`：Lambda 运行时要遍历检查 CloudWatch Alarm 的 Region 列表
 >
 > 两者互相独立。例如可以把 Stack 部署在 `us-east-1`，然后让它监控 `ap-northeast-1 + ap-southeast-1`。
 
-**常用 cron 示例**（EventBridge 使用 **UTC**）：
+**常用 cron 示例**（按 `SCHEDULE_TIMEZONE` 指定的时区解释）：
 
-| 北京时间 | UTC | cron |
+| 触发时间 | cron 表达式 | 时区 |
 |---|---|---|
-| 每天 09:00 | 01:00 | `cron(0 1 * * ? *)` |
-| 每天 18:00 | 10:00 | `cron(0 10 * * ? *)` |
-| 工作日 09:00 | 01:00 | `cron(0 1 ? * MON-FRI *)` |
-| 每 2 小时 | - | `cron(0 */2 * * ? *)` |
+| 每天 09:00（北京） | `cron(0 9 * * ? *)` | `Asia/Shanghai` |
+| 每天 18:00（北京） | `cron(0 18 * * ? *)` | `Asia/Shanghai` |
+| 工作日 09:00（北京） | `cron(0 9 ? * MON-FRI *)` | `Asia/Shanghai` |
+| 每 2 小时 | `cron(0 */2 * * ? *)` | 任意 |
+| 每天 09:00（美西） | `cron(0 9 * * ? *)` | `America/Los_Angeles` |
 
 ---
 

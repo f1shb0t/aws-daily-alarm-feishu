@@ -2,8 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as events from 'aws-cdk-lib/aws-events';
-import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as path from 'path';
 
@@ -14,8 +13,10 @@ export interface DailyAlarmFeishuStackProps extends cdk.StackProps {
   feishuWebhookSecret?: string;
   /** 遍历的 AWS Region 列表 */
   targetRegions: string[];
-  /** EventBridge schedule 表达式（UTC） */
+  /** EventBridge Scheduler 调度表达式（默认 UTC，可通过 scheduleTimezone 指定） */
   scheduleExpression: string;
+  /** 调度时区（IANA 格式，如 Asia/Shanghai、UTC）；默认 UTC */
+  scheduleTimezone?: string;
 }
 
 export class DailyAlarmFeishuStack extends cdk.Stack {
@@ -28,6 +29,15 @@ export class DailyAlarmFeishuStack extends cdk.Stack {
       );
     }
 
+    // ---- Log Group ----
+    // 显式建 LogGroup（替代已废弃的 Function#logRetention）
+    // 命名遵守 Lambda 默认规则：/aws/lambda/<function-name>
+    // 这里不写死 function name，让 CDK 自动生成并按物理 id 引用
+    const logGroup = new logs.LogGroup(this, 'DailyAlarmLambdaLogs', {
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // cdk destroy 时一并删除
+    });
+
     // ---- Lambda ----
     const handler = new lambda.Function(this, 'DailyAlarmLambda', {
       runtime: lambda.Runtime.PYTHON_3_12,
@@ -35,7 +45,7 @@ export class DailyAlarmFeishuStack extends cdk.Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambda')),
       timeout: cdk.Duration.minutes(5),
       memorySize: 512,
-      logRetention: logs.RetentionDays.ONE_MONTH,
+      logGroup, // 显式指定 LogGroup，CDK 会自动保证 function name 与 LogGroup 匹配
       environment: {
         FEISHU_WEBHOOK_URL: props.feishuWebhookUrl,
         FEISHU_WEBHOOK_SECRET: props.feishuWebhookSecret || '',
@@ -44,7 +54,7 @@ export class DailyAlarmFeishuStack extends cdk.Stack {
       description: 'Aggregate AWS alarms and push to Feishu daily',
     });
 
-    // ---- IAM 权限 ----
+    // ---- IAM: Lambda 执行权限 ----
     handler.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -60,12 +70,35 @@ export class DailyAlarmFeishuStack extends cdk.Stack {
       })
     );
 
-    // ---- EventBridge Rule (cron) ----
-    const rule = new events.Rule(this, 'DailyAlarmSchedule', {
-      schedule: events.Schedule.expression(props.scheduleExpression),
-      description: 'Daily trigger for AWS alarm digest to Feishu',
+    // ---- EventBridge Scheduler ----
+    // 使用新版 EventBridge Scheduler（不是 legacy Rules）
+    // 优势：原生支持 timezone、flexible time window、统一管理面板
+
+    // 1) Scheduler 调用 Lambda 的执行角色
+    const schedulerRole = new iam.Role(this, 'SchedulerInvokeRole', {
+      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
+      description: 'Allow EventBridge Scheduler to invoke Lambda',
     });
-    rule.addTarget(new targets.LambdaFunction(handler));
+    handler.grantInvoke(schedulerRole);
+
+    // 2) Schedule
+    const timezone = props.scheduleTimezone || 'UTC';
+    const schedule = new scheduler.CfnSchedule(this, 'DailyAlarmSchedule', {
+      flexibleTimeWindow: { mode: 'OFF' },
+      scheduleExpression: props.scheduleExpression,
+      scheduleExpressionTimezone: timezone,
+      description: 'Daily trigger for AWS alarm digest to Feishu',
+      state: 'ENABLED',
+      target: {
+        arn: handler.functionArn,
+        roleArn: schedulerRole.roleArn,
+        input: JSON.stringify({ source: 'eventbridge-scheduler' }),
+        retryPolicy: {
+          maximumRetryAttempts: 2,
+          maximumEventAgeInSeconds: 3600,
+        },
+      },
+    });
 
     // ---- Outputs ----
     new cdk.CfnOutput(this, 'LambdaFunctionName', {
@@ -78,9 +111,14 @@ export class DailyAlarmFeishuStack extends cdk.Stack {
       description: '手动触发命令（测试用）',
     });
 
+    new cdk.CfnOutput(this, 'ScheduleName', {
+      value: schedule.ref,
+      description: 'EventBridge Scheduler 名称（在 Scheduler → Schedules 下查看）',
+    });
+
     new cdk.CfnOutput(this, 'ScheduleExpression', {
-      value: props.scheduleExpression,
-      description: '当前调度表达式（UTC）',
+      value: `${props.scheduleExpression} (${timezone})`,
+      description: '当前调度表达式 + 时区',
     });
 
     new cdk.CfnOutput(this, 'TargetRegions', {
