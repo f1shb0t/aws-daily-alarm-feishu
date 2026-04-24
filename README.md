@@ -2,7 +2,26 @@
 
 > 每日汇总 AWS 账号下的 **CloudWatch Alarms** + **AWS Health Events**，通过飞书自定义机器人推送到群/私聊。
 
-![arch](https://img.shields.io/badge/AWS-CDK%20v2-orange) ![lang](https://img.shields.io/badge/Lambda-Python%203.12-blue) ![lang](https://img.shields.io/badge/CDK-TypeScript-3178C6)
+![arch](https://img.shields.io/badge/AWS-CDK%20v2-orange) ![lang](https://img.shields.io/badge/Lambda-Python%203.12-blue) ![lang](https://img.shields.io/badge/CDK-TypeScript-3178C6) ![status](https://img.shields.io/badge/status-experimental-yellow)
+
+---
+
+## ⚠️ 免责声明 / Disclaimer
+
+本项目是一个**个人实验性 / 演示性质（demo）**的 side project，仅供学习、参考与内部试用。
+
+- ❌ **不保证可用于生产环境**：未经过生产级别的安全审计、压力测试、长期稳定性验证
+- ❌ **不保证向前兼容**：依赖的 AWS SDK、CDK、飞书 Webhook API 均可能发生破坏性变更
+- ❌ **作者不为任何直接或间接损失负责**，包括但不限于：漏报告警、误报告警、AWS 费用异常、信息泄露、服务中断等
+- ✅ **按"原样（AS IS）"提供**，遵循 [MIT License](./LICENSE)
+- ✅ 欢迎 fork 后根据自己环境做安全评估、加告警降噪、接入 Secrets Manager、开启 VPC endpoint 等加固
+
+如果你打算投入生产，**请至少做以下加固**：
+1. `FEISHU_WEBHOOK_URL` / `FEISHU_WEBHOOK_SECRET` 改用 **AWS Secrets Manager** 或 **Parameter Store (SecureString)**，不要走环境变量明文
+2. 给 Lambda 配置 **DLQ**（死信队列）+ **CloudWatch Alarm**（监控 Lambda 自身失败）
+3. 根据实际账号规模评估 IAM 权限边界，按需收窄 `resources: ['*']`
+4. 多账号场景请走 AWS Organizations + 跨账号 AssumeRole
+5. 自行审阅 `lambda/handler.py` 中向飞书发送的字段，确保不会泄露敏感信息（如 AlarmArn 中的账号 ID）
 
 ---
 
