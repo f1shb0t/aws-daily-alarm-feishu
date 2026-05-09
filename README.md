@@ -80,7 +80,7 @@
 
 ```bash
 # 1. 克隆 & 安装
-git clone git@github.com:f1shb0t/aws-daily-alarm-feishu.git
+git clone <your-repo-url>   # 替换为你自己 fork / mirror 的仓库地址
 cd aws-daily-alarm-feishu
 npm install
 
