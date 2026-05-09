@@ -328,6 +328,11 @@ def push_to_feishu(payload: Dict[str, Any]) -> None:
         method="POST",
     )
 
+    # 限流（11232）窗口是分钟级，用长退避；其它错误用短退避
+    RATE_LIMIT_CODE = 11232
+    rate_limit_backoffs = [30, 60, 120]
+    default_backoffs = [1, 2, 4]
+
     last_err: Exception | None = None
     for attempt in range(3):
         try:
@@ -335,13 +340,18 @@ def push_to_feishu(payload: Dict[str, Any]) -> None:
                 body = resp.read().decode("utf-8")
                 logger.info("Feishu response: %s", body)
                 result = json.loads(body)
-                if result.get("code", 0) != 0 and result.get("StatusCode", 0) != 0:
-                    raise RuntimeError(f"Feishu returned error: {body}")
+                code = result.get("code", 0)
+                # 飞书 webhook 成功时 code == 0；非 0 都视为失败
+                if code != 0:
+                    raise RuntimeError(f"Feishu returned error (code={code}): {body}")
                 return
         except (urllib.error.URLError, urllib.error.HTTPError, RuntimeError) as e:
             last_err = e
             logger.warning("Feishu push attempt %d failed: %s", attempt + 1, e)
-            time.sleep(2 ** attempt)
+            is_rate_limited = isinstance(e, RuntimeError) and f"code={RATE_LIMIT_CODE}" in str(e)
+            backoffs = rate_limit_backoffs if is_rate_limited else default_backoffs
+            if attempt < 2:
+                time.sleep(backoffs[attempt])
     raise RuntimeError(f"Feishu push failed after 3 attempts: {last_err}")
 
 
